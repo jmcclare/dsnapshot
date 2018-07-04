@@ -25,6 +25,11 @@ reusing the same data on disk (using hard links). The next time you run it, it
 will create a snapshot of the last backup in `snapshots-directory`, then
 hard‐link only the files that have changed into that.
 
+Each time you run it, dsnapshot creates a `daily` snapshot in the snapshots
+directory. If it is the first day of the week (Sunday) it will create a new
+`weekly` snapshot. If it is the first day of the month it will create a
+`monthly` snapshot.
+
 For full usage instructions, run `dsnapshot --help`
 
 
@@ -76,4 +81,6 @@ In adition, do not edit any of the following settings.
 * `rsync_long_args`
 
 What you may want to edit are the `BACKUP INTERVALS`. Any valid options are
-fine here.
+fine here, but be aware that dsnapshot only runs backup intervals with the
+names `daily`, `weekly`, and `monthly`. You can change the number of snapshots
+to keep for each of those, but creating any other intervals will do nothing.
