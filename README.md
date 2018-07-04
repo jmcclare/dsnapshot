@@ -71,7 +71,7 @@ In adition, do not edit any of the following settings.
 
 * `config_version`
 * `snapshot_root`
-* `cmd_rsync` —unless your system’s `rsync` command is actually in a different place.
+* `cmd_rsync` —unless your system’s `rsync` command is actually in a different place
 * `rsync_short_args`
 * `rsync_long_args`
 
