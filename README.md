@@ -53,3 +53,27 @@ chmod a+rx /usr/share/dsnapshot
 cp template-rsnapshot.conf /usr/share/dsnapshot
 chmod a+rx /usr/share/dsnapshot/template-rsnapshot.conf
 ```
+
+
+## Configuration ##
+
+You don’t need to configure this if you don’t want to, but you may want to
+change the rsnapshot configuration file it uses.
+
+Copy `template-rsnapshot.conf` either into `/etc/dsnapshot/` or keep it in the
+same directory as the `dsnapshot` command.
+
+This is a standard rsnapshot config file with only a few differences. There are
+some settings in the file that you should not edit. In the `BACKUP POINTS /
+SCRIPTS` section there is only one backup point defined. Leave this as is.
+
+In adition, do not edit any of the following settings.
+
+* `config_version`
+* `snapshot_root`
+* `cmd_rsync`
+* `rsync_short_args`
+* `rsync_long_args`
+
+What you may want to edit are the `BACKUP INTERVALS`. Any valid options are
+fine here.
