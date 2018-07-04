@@ -99,18 +99,11 @@ main()
     source_dir="$(cd $source_dir && pwd)/"
     debug "source_dir: ${source_dir}"
 
-    if [ ! -z "${snapshot_dir}" ]
+    if [ -z "${snapshot_dir}" ]
     then
-        check_directory "${snapshot_dir}"
-    else
         snapshot_dir="$(dirname ${source_dir})/snapshots"
-
-        if [ ! -d "${snapshot_dir}" ]
-        then
-            mkdir "${snapshot_dir}"
-            check_err $? 'Snapshot directory could not be created.'
-        fi
     fi
+    check_directory "${snapshot_dir}"
 
     # Convert $snapshot_dir to a full path with a trailing slash.
     snapshot_dir="$(cd $snapshot_dir && pwd)/"
@@ -307,13 +300,15 @@ debug()
 
 
 #
-# check_directory - check to see if a directory exists
+# check_directory - check to see if a directory exists. Create it if it does
+# not.
 #
 check_directory()
 {
     if [ ! -d "${1}" ]
     then
-        die "Directory $1 does not exist. Aborting."
+        mkdir -p "${1}"
+        check_err $? 'Directory ${1} could not be created. Aborting.'
     fi
 }
 
