@@ -16,7 +16,9 @@ That’s where dsnapshot comes in.
 
 Basic use:
 
-    dsnapshot /path/to/source-directory /path/to/snapshots-directory
+```bash
+dsnapshot /path/to/source-directory /path/to/snapshots-directory
+```
 
 That will clone every file in `source-directory` into the `snapshots-directory`
 reusing the same data on disk (using hard links). The next time you run it, it
