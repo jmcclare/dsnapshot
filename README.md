@@ -1,9 +1,29 @@
-# dsnapshot #
+# dsnapshot — Directory Snapshot #
 
 A command that uses rsnapshot to make incremental versions of a directory on
 the same volume.
 
-For usage instructions, run `dsnapshot --help`
+[rsnapshot](http://rsnapshot.org/) handles efficient backups well. It only
+writes the files that have changed since the last backup and hard links the
+rest from there.
+
+What rsnapshot does not do is let you simply run it ad‐hoc with command‐line
+options to make snapshots of any directory. It also doesn’t hard link files
+from the source directory so that you can make efficient snapshots on the same
+volume that share data with the original source.
+
+That’s where dsnapshot comes in.
+
+Basic use:
+
+    dsnapshot /path/to/source-directory /path/to/snapshots-directory
+
+That will clone every file in `source-directory` into the `snapshots-directory`
+reusing the same data on disk (using hard links). The next time you run it, it
+will create a snapshot of the last backup in `snapshots-directory`, then
+hard‐link only the files that have changed into that.
+
+For full usage instructions, run `dsnapshot --help`
 
 
 # Installation #
