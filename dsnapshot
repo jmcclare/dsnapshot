@@ -66,9 +66,19 @@ main()
     if [[ $TEST == true ]]
     then
         cfg_template="$(dirname $0)/template-rsnapshot.conf"
+
+    # Look for a config file template in the same directory as the command
+    # first.
     elif [ -f "$(dirname $0)/template-rsnapshot.conf" ]
     then
         cfg_template="$(dirname $0)/template-rsnapshot.conf"
+
+    # Look for a config file template in /etc/dsnapshot
+    elif [ -f "/etc/dsnapshot/template-rsnapshot.conf" ]
+    then
+        cfg_template="/etc/dsnapshot/template-rsnapshot.conf"
+
+    # Assume there is a config file template in /usr/share/dsnapshot
     else
         cfg_template='/usr/share/dsnapshot/template-rsnapshot.conf'
     fi
