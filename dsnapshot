@@ -6,62 +6,19 @@
 # See DESCRIPTION below in print_help(), or run dsnapshot --help
 #
 
-main()
+function main
 {
-    tmp_dir=''
-
     # These need to be exported because the perl one-liner that fills in the
     # variables in the config file template only subsitutes environment
     # variables.
     export source_dir=''
     export snapshot_dir=''
 
-    #
-    # Parse the command-line arguments.
-    #
-    # Code borrowed and modified from here: http://www.digitalpeer.com/id/parsing
-    # ...with additional help from here:
-    # http://www.linuxjournal.com/content/bash-parameter-expansion
-    #
-    for i in $*
-    do
-        case $i in
-            -s=*|--source-dir=*)
-                source_dir=${i#*=}
-                ;;
-            -d=*|--snapshot-dir=*)
-                snapshot_dir=${i#*=}
-                ;;
-            -v|--debug)
-                export DEBUG=true
-                ;;
-            -t|--test)
-                export TEST=true
-                ;;
-            -h|--help)
-                print_help
-                exit
-                ;;
-            *)
-                if [ -z "${source_dir}" ]
-                then
-                    source_dir="${i}"
-                elif [ -z "${snapshot_dir}" ]
-                then
-                    snapshot_dir="${i}"
-                else
-                    # The only unnamed options are the source dir and the
-                    # snapshot dir, in that order. Anything else that’s not
-                    # recognized is an error.
-                    alarm "ERROR: Unknown option '${i}'"
-                    echo
-                    echo "Usage:"
-                    print_help
-                    exit 1
-                fi
-            ;;
-        esac
-    done
+
+    parse_args "${@}"
+
+
+    # Determine which config file template to use.
 
     if [[ $TEST == true ]]
     then
@@ -88,32 +45,13 @@ main()
         die "Template file ${cfg_template} missing."
     fi
 
-    if [ -z "${source_dir}" ]
-    then
-        die 'ERROR: No source dir specified.'
-    fi
-
-    check_directory "${source_dir}"
-
-    # Convert $source_dir to a full path with a trailing slash.
-    source_dir="$(cd $source_dir && pwd)/"
-    debug "source_dir: ${source_dir}"
-
-    if [ -z "${snapshot_dir}" ]
-    then
-        snapshot_dir="$(dirname ${source_dir})/snapshots"
-    fi
-    check_directory "${snapshot_dir}"
-
-    # Convert $snapshot_dir to a full path with a trailing slash.
-    snapshot_dir="$(cd $snapshot_dir && pwd)/"
-    debug "snapshot_dir: ${snapshot_dir}"
 
     # This is deleted anytime we exit, including with errors. See the clean_up
     # function below.
     temp_dir=$(mktemp -d --tmpdir=/tmp dsnapshot-XXXXXXXX)
     check_err $? 'ERROR: temp directory could not be created.'
     rsnapshot_cfg="${temp_dir}/rsnapshot.conf"
+
 
     #
     # This convoluted perl expression comes from
@@ -129,6 +67,7 @@ main()
     # necessary.
     #
     perl -pe 's;(\\*)(\$([a-zA-Z_][a-zA-Z_0-9]*)|\$\{([a-zA-Z_][a-zA-Z_0-9]*)\});substr($1,0,int(length($1)/2)).(length($1)%2?$2:$ENV{$3||$4});eg' "${cfg_template}" > "${rsnapshot_cfg}"
+
 
     # Always make a daily snapshot.
     rsnapshot -c "${rsnapshot_cfg}" daily
@@ -149,40 +88,148 @@ main()
 }
 
 
-print_help()
+function print_help
 {
-    printf "NAME
-    dsnapshot
+    cat <<-EOF
+		NAME
+		    dsnapshot
+		
+		SYNOPSIS
+		    dsnapshot [OPTION...] SOURCE_DIR [DESTINATION_DIR]
+		
+		DESCRIPTION
+		    Uses rsnapshot to make incremental versions of a directory on the same
+		    volume.
+		
+		OPTIONS
+		    -s, --source-dir
+		        The directory to make snapshots of.
+		
+		    -d, --snapshot-dir
+		        The directory to make the snapshots in. Defaults to a directory named
+		        'snapshots' in the same directory as the source directory.
+		
+		    -d, --debug
+		        Enable debug output.
+		
+		    -t, --test
+		        Test mode for development. Set certain variables to hardcoded defaults.
+		
+		    -h, --help
+		        print this help text and exit.
+		
+		EXAMPLES
+		    dsnapshot /home/fred/Documents /home/fred/backup/Documents
+		
+		    dsnapshot /srv/backup/users/fred/music/latest /srv/backup/users/fred/music/snapshots
+	EOF
+}
 
-SYNOPSIS
-    dsnapshot [OPTION...] SOURCE_DIR [DESTINATION_DIR]
 
-DESCRIPTION
-    Uses rsnapshot to make incremental versions of a directory on the same
-    volume.
+function parse_args
+{
+    #
+    # Parse the command-line arguments.
+    #
+    # Code borrowed and modified from here:
+    # https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash#answer-29754866
+    #
 
-OPTIONS
-    -s, --source-dir
-        The directory to make snapshots of.
+    ! getopt --test > /dev/null 
+    if [[ ${PIPESTATUS[0]} -ne 4 ]]
+    then
+        die 'I’m sorry, cannot parse command line parameters in this environment. `getopt --test` failed.'
+        exit 1
+    fi
 
-    -d, --snapshot-dir
-        The directory to make the snapshots in. Defaults to a directory named
-        'snapshots' in the same directory as the source directory.
+    #
+    # Declare option arguments.
+    #
+    # For options that take a parameter, put a : after the letter or name, ex:
+    #
+    #   OPTIONS=s:dt
+    #   LONGOPTS=source:,debug,test
+    #
+    OPTIONS=dth
+    LONGOPTS=debug,test,help
 
-    -d, --debug
-        Enable debug output.
+    # Use ! and PIPESTATUS to get exit code with errexit set.
+    # Temporarily store output to be able to check for errors.
+    # Activate quoting/enhanced mode (e.g. by writing out “--options”).
+    # Pass arguments only via   -- "$@"   to separate them correctly.
+    ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]
+    then
+        # e.g. return value is 1
+        #  then getopt has complained about wrong arguments to stdout
+        exit 2
+    fi
+    # read getopt’s output this way to handle the quoting right:
+    eval set -- "$PARSED"
 
-    -t, --test
-        Test mode for development. Set certain variables to hardcoded defaults.
+    path= ratings_file=
+    #
+    # Now enjoy the options in order and nicely split until we see --
+    #
+    # For options that take a parameter, write a case like this:
+    #
+    #   -s|--source)
+    #       source="$2"
+    #       shift 2
+    #       ;;
+    #
+    while true; do
+        case "$1" in
+            -d|--debug)
+                export DEBUG=true
+                shift
+                ;;
+            -t|--test)
+                export TEST=true
+                shift
+                ;;
+            -h|--help)
+                print_help
+                exit
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                echo "Programming error"
+                exit 3
+                ;;
+        esac
+    done
 
-    -h, --help
-        print this help text and exit.
 
-EXAMPLES
-    dsnapshot /home/fred/Documents /home/fred/backup/Documents
+    if [ -z "${1}" ]
+    then
+        die 'ERROR: No source dir specified.'
+    fi
+    source_dir="${1}"
 
-    dsnapshot /srv/backup/users/fred/music/latest /srv/backup/users/fred/music/snapshots
-"
+    if [ ! -d "${source_dir}" ]
+    then
+        die 'ERROR: Invalid source directory.'
+    fi
+    # Ensure source_dir is a fully qualified path with trailing slash.
+    source_dir="$(cd "$(dirname "${source_dir}")" && pwd)/$(basename "${source_dir}")/"
+    debug "source_dir: ${source_dir}"
+
+
+    if [ ! -z "${2}" ]
+    then
+        snapshot_dir="${2}"
+    else
+        snapshot_dir="$(dirname ${source_dir})/snapshots"
+    fi
+    check_directory "${snapshot_dir}"
+    # Ensure $snapshot_dir is a full path with a trailing slash.
+    snapshot_dir="$(cd $snapshot_dir && pwd)/"
+    debug "snapshot_dir: ${snapshot_dir}"
 }
 
 
@@ -192,7 +239,7 @@ EXAMPLES
 # The trap command ensures this is called upon exit, even if the program exits
 # with an error.
 #
-clean_up()
+function clean_up
 {
     if [ -d "${temp_dir}" ]
     then
@@ -203,11 +250,17 @@ trap clean_up EXIT
 
 
 #
+# bool — medium strictness boolean value checking.
+#
+bool() ([ -z "${2+x}" ] && [[ $1 == true ]])
+
+
+#
 # warn - print warning message
 #
 # $1 - message
 #
-warn()
+function warn
 {
     # print to regular output in regular orange
     printf "\e[0;33m"
@@ -223,7 +276,7 @@ warn()
 #
 # $1 - message
 #
-alarm()
+function alarm
 {
     # print to error output in bold red
     printf "\e[1;31m" >&2
@@ -240,11 +293,12 @@ alarm()
 # $1 - error message to print
 # $2 - (optional) error code to exit with, defaults to 1
 #
-die()
+function die
 {
     alarm "${1}"
 
-    if [ ! -z "${2}" ]
+    # Use the return code if it is numeric and not an empty string.
+    if echo "${2}" | grep -qE '^[0-9]+$'
     then
         exit ${2}
     else
@@ -258,15 +312,25 @@ die()
 #
 # $1 - return code to check
 # $2 - (optional) text to display on failure. Defaults to basic message.
+# $3 - (optional) error code to exit with, defaults to 1
 #
-check_err()
+function check_err
 {
     local a=$1
 
     # Empty strings will evaluate as equal to 0, so check for them first.
     if [ -z "${a}" ]
     then
-        failure=true
+        # An empty string means this function was called incorrectly, but it
+        # was not given a failure return code, so don’t exit.
+        warn "WARNING: check_err called with no return code."
+        return
+
+    elif ! echo "${a}" | grep -qE '^[0-9]+$'
+    then
+        warn "WARNING: check_err called with non‐numeric value."
+        return
+
     elif ! (( a == 0 ))
     then
         failure=true
@@ -280,19 +344,28 @@ check_err()
         else
             message="${2}"
         fi
-        die "${message}" "${1}"
+
+        # Use the return code if it is numeric and not an empty string.
+        if echo "${3}" | grep -qE '^[0-9]+$'
+        then
+            return_code="${3}"
+        else
+            return_code=1
+        fi
+
+        die "${message}" "${return_code}"
     fi
 }
 
 
 #
-# debug - print debug message to stderr if DEBUG is set to true
+# debug - print debug message to stderr if DEBUG is set to 'true'
 #
 # $1 - message
 #
-debug()
+function debug
 {
-    if [[ $DEBUG == true ]]
+    if bool $DEBUG
     then
         echo "${1}" >&2
     fi
@@ -303,7 +376,7 @@ debug()
 # check_directory - check to see if a directory exists. Create it if it does
 # not.
 #
-check_directory()
+function check_directory
 {
     if [ ! -d "${1}" ]
     then
@@ -311,5 +384,6 @@ check_directory()
         check_err $? 'Directory ${1} could not be created. Aborting.'
     fi
 }
+
 
 main "${@}"
