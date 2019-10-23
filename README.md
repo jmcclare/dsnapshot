@@ -53,20 +53,25 @@ cp /path/to/dsnapshot /usr/bin/dsnapshot
 chmod a+x /usr/bin/dsnapshot
 
 # Put the rsnapshot config template into place
-mkdir /usr/share/dsnapshot
-chmod a+rx /usr/share/dsnapshot
-cp template-rsnapshot.conf /usr/share/dsnapshot
-chmod a+rx /usr/share/dsnapshot/template-rsnapshot.conf
+mkdir /etc/dsnapshot
+chmod a+rx /etc/dsnapshot
+cp template-rsnapshot.conf /etc/dsnapshot
+chmod a+rx /etc/dsnapshot/template-rsnapshot.conf
 ```
 
 
 ## Configuration ##
 
 You don’t need to configure this if you don’t want to, but you may want to
-change the rsnapshot configuration file it uses.
+change the rsnapshot configuration template file it uses. This is in your
+`template-rsnapshot.conf` file.
 
-Copy `template-rsnapshot.conf` either into `/etc/dsnapshot/` or keep it in the
-same directory as the `dsnapshot` command.
+It will look for your `template-rsnapshot.conf` file in the following locations
+and use the first one it finds.
+
+1. In the same directory as your `dsnapshot` command.
+1. At `/etc/dsnapshot/template-rsnapshot.conf`
+1. At `/usr/share/dsnapshot/template-rsnapshot.conf`
 
 This is a standard rsnapshot config file with only a few differences. There are
 some settings in the file that you should not edit. In the `BACKUP POINTS /
