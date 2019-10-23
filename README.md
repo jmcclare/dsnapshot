@@ -56,7 +56,7 @@ chmod a+x /usr/bin/dsnapshot
 mkdir /etc/dsnapshot
 chmod a+rx /etc/dsnapshot
 cp template-rsnapshot.conf /etc/dsnapshot
-chmod a+rx /etc/dsnapshot/template-rsnapshot.conf
+chmod a+r /etc/dsnapshot/template-rsnapshot.conf
 ```
 
 
