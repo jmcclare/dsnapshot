@@ -1,4 +1,6 @@
-#! /bin/bash
+#! /usr/bin/env bash
+
+set -u
 
 #
 # dsnapshot - directory snapshot
@@ -23,6 +25,13 @@ function main
     # variables.
     export source_dir=''
     export snapshot_dir=''
+
+    # Set defaults to prevent environment variables from overriding these and
+    # to allow use of `set -u`.
+    DEBUG=false
+    TEST=false
+    # Let the color function choose the default option.
+    color_option=''
 
 
     parse_opts "${@}"
@@ -138,6 +147,8 @@ function print_help
 		    0  Success
 		    1  Error
 		    64 Command line usage error
+		    70 Internal software error
+		    71 System error
 		
 		    Some exit codes based on /usr/include/sysexits.h
 	EOF
@@ -180,14 +191,14 @@ function parse_opts
     then
         # e.g. return value is 1
         #  then getopt has complained about wrong arguments to stdout
-        exit 70
+        exit 64
     fi
     # read getopt’s output this way to handle the quoting right:
     eval set -- "$PARSED"
 
     # Set defaults here or earlier, if any.
 
-    local input_color_option
+    local input_color_option=''
 
     #
     # Now enjoy the options in order and nicely split until we see --
@@ -242,7 +253,8 @@ function parse_opts
             color_option=auto
             ;;
         '')
-            # Let the color function choose the default.
+            # Let the color function choose the default option.
+            color_option=''
             ;;
         *)
             alarm "Invalid value ${input_color_option} for --color."
@@ -275,7 +287,7 @@ function parse_opts
     else
         snapshot_dir="$(dirname ${source_dir})/snapshots"
     fi
-    check_directory "${snapshot_dir}"
+    check_dir "${snapshot_dir}"
     # Ensure $snapshot_dir is a full path with a trailing slash.
     snapshot_dir="$(cd $snapshot_dir && pwd)/"
     debug "snapshot_dir: ${snapshot_dir}"
@@ -290,7 +302,7 @@ function parse_opts
 #
 function clean_up
 {
-    if [ -d "${temp_dir}" ]
+    if [[ -v tmp_dir ]] && [ -d "${temp_dir}" ]
     then
         rm -rf "${temp_dir}"
     fi
@@ -352,6 +364,15 @@ function color
 #
 function warn
 {
+    # Allow this to be called with no parameters to output a newline to stderr,
+    # just like calling echo with no parameters.
+    if [ -z ${1+x} ]
+    then
+        local message=""
+    else
+        local message="${1}"
+    fi
+
     if color
     then
         # print to regular output in regular orange
@@ -360,7 +381,7 @@ function warn
 
     # Print the message with regular `echo` to prevent anything in the string
     # from being interpreted as formatting characters.
-    echo "${1}"
+    echo "${message}"
 
     if color
     then
@@ -376,6 +397,15 @@ function warn
 #
 function alarm
 {
+    # Allow this to be called with no parameters to output a newline to stderr,
+    # just like calling echo with no parameters.
+    if [ -z ${1+x} ]
+    then
+        local message=""
+    else
+        local message="${1}"
+    fi
+
     if color
     then
         # print to error output in bold red
@@ -401,15 +431,34 @@ function alarm
 #
 function die
 {
-    alarm "${1}"
-
-    # Use the return code if it is numeric and not an empty string.
-    if echo "${2}" | grep -qE '^[0-9]+$'
+    # The first test lets you check if a numeric variable is unset. You cannot
+    # simply use `if [[ -v 1 ]]`
+    # From https://stackoverflow.com/a/13864829
+    if [ -z ${1+x} ]
     then
-        exit ${2}
+        local message=''
     else
-        exit 1
+        local message="${1}"
     fi
+
+    if [ ! -z "${1}" ]
+    then
+        alarm "${message}"
+    fi
+
+    if [ -z ${2+x} ] || [ -z "${2}" ]
+    then
+        local exit_code=1
+    else
+        local exit_code="${2}"
+    fi
+
+    # Use the return code only if it is numeric
+    if echo "${exit_code}" | grep -qE '^[0-9]+$'
+    then
+        exit ${exit_code}
+    fi
+    exit 1
 }
 
 
@@ -422,44 +471,44 @@ function die
 #
 function check_err
 {
-    local a=$1
-
-    # Empty strings will evaluate as equal to 0, so check for them first.
-    if [ -z "${a}" ]
+    # The first test lets you check if a numeric variable is unset. You cannot
+    # simply use `if [[ -v 1 ]]`
+    # From https://stackoverflow.com/a/13864829
+    if [ -z ${1+x} ] || [ -z "${1}" ]
     then
-        # An empty string means this function was called incorrectly, but it
-        # was not given a failure return code, so don’t exit.
-        warn "WARNING: check_err called with no return code."
-        return
-
-    elif ! echo "${a}" | grep -qE '^[0-9]+$'
-    then
-        warn "WARNING: check_err called with non‐numeric value."
-        return
-
-    elif ! (( a == 0 ))
-    then
-        failure=true
+        # Exit with internal software error from /usr/include/sysexits.h
+        die 'Internal software error: No return code passed to check_err.' 70
     fi
+    local return_code="${1}"
 
-    if [[ $failure == true ]]
+    if ! echo "${return_code}" | grep -qE '^[0-9]+$'
     then
-        if [ -z "${2}" ]
+        # Exit with internal software error from /usr/include/sysexits.h
+        die 'Internal software error: check_err called with non‐numeric value.' 70
+
+    elif ! (( return_code == 0 ))
+    then
+        local message="Command returned fatal error."
+        # Make sure $2 is set before we check if it’s an empty string.
+        if [ ! -z ${2+x} ] && [ ! -z "${2}" ]
         then
-            message="Command returned fatal error."
-        else
-            message="${2}"
+            local message="${2}"
         fi
 
-        # Use the return code if it is numeric and not an empty string.
-        if echo "${3}" | grep -qE '^[0-9]+$'
+        local exit_code=1
+        # Make sure $3 is set before we check if it’s an empty string.
+        if [ ! -z ${3+x} ] && [ ! -z "${3}" ]
         then
-            return_code="${3}"
-        else
-            return_code=1
+            local exit_code=${3}
         fi
 
-        die "${message}" "${return_code}"
+        # Use the exit code if it is numeric.
+        if ! echo "${exit_code}" | grep -qE '^[0-9]+$'
+        then
+            exit_code=1
+        fi
+
+        die "${message}" "${exit_code}"
     fi
 }
 
@@ -471,28 +520,52 @@ function check_err
 #
 function debug
 {
+    # Allow this to be called with no parameters to output a newline to stderr,
+    # just like calling echo with no parameters.
+    if [ -z ${1+x} ]
+    then
+        local message=""
+    else
+        local message="${1}"
+    fi
+
     if bool $DEBUG
     then
-        echo "${1}" >&2
+        echo "${message}" >&2
     fi
 }
 
 
 #
-# check_directory - check to see if a directory exists. Create it if it does
+# check_dir - check to see if a directory exists. Create it if it does
 # not.
 #
-function check_directory
+function check_dir
 {
-    if [ ! -d "${1}" ]
+    # The first test lets you check if a numeric variable is unset. You cannot
+    # simply use `if [[ -v 1 ]]`
+    # From https://stackoverflow.com/a/13864829
+    if [ -z ${1+x} ] || [ -z "${1}" ]
     then
-        mkdir -p "${1}"
-        check_err $? 'Directory ${1} could not be created. Aborting.'
+        # Exit with internal software error from /usr/include/sysexits.h
+        die 'Internal software error: No directory path passed to check_dir.' 70
+    fi
+    local checked_dir="${1}"
+
+    if [ ! -d "${checked_dir}" ]
+    then
+        mkdir -p "${checked_dir}"
+        check_err $? "Directory ${checked_dir} could not be created. Aborting."
     fi
 
     # We check the dir by changing to it. We must change to it in a subshell to
     # avoid changing the current directory of the calling command.
-    err="$(if ! cd "${1}"; then echo "Cannot access directory ${1}. Aborting."; fi)"
+    #
+    # We can record the current working directory and cd back to it, but it is
+    # possible that the current directory when the command was run is not
+    # accessible to the current user. We would get an error if we tried to cd
+    # back to it.
+    local err="$(if ! cd "${checked_dir}"; then echo "Cannot access directory ${checked_dir}. Aborting."; fi)"
 
     if [ ! -z "${err}" ]
     then
